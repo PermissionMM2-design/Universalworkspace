@@ -1,0 +1,2326 @@
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+
+local player = Players.LocalPlayer
+
+-- ==================== ADVANCED STROKE & COLOR SYSTEM ====================
+local strokeInstances = {}
+local strokeMode = "Rainbow" -- "Rainbow", "Static", "Pulse"
+local rainbowSpeed = 0.2
+local staticColor = Color3.fromRGB(0, 255, 200)
+local strokeThickness = 1.5
+local hue = 0
+local pulseTime = 0
+
+local function applyRainbowStroke(instance, thickness)
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = thickness or strokeThickness
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = instance
+    table.insert(strokeInstances, stroke)
+    return stroke
+end
+
+RunService.RenderStepped:Connect(function(delta)
+    if strokeMode == "Rainbow" then
+        hue = (hue + delta * rainbowSpeed) % 1
+        local activeColor = Color3.fromHSV(hue, 0.8, 1)
+        for i = #strokeInstances, 1, -1 do
+            local stroke = strokeInstances[i]
+            if stroke and stroke.Parent then
+                stroke.Color = activeColor
+                stroke.Thickness = strokeThickness
+            else
+                table.remove(strokeInstances, i)
+            end
+        end
+    elseif strokeMode == "Static" then
+        for i = #strokeInstances, 1, -1 do
+            local stroke = strokeInstances[i]
+            if stroke and stroke.Parent then
+                stroke.Color = staticColor
+                stroke.Thickness = strokeThickness
+            else
+                table.remove(strokeInstances, i)
+            end
+        end
+    elseif strokeMode == "Pulse" then
+        pulseTime = pulseTime + delta * 3
+        local alpha = (math.sin(pulseTime) + 1) / 2
+        local pulseColor = staticColor:Lerp(Color3.fromRGB(255, 255, 255), alpha * 0.5)
+        for i = #strokeInstances, 1, -1 do
+            local stroke = strokeInstances[i]
+            if stroke and stroke.Parent then
+                stroke.Color = pulseColor
+                stroke.Thickness = strokeThickness + (alpha * 1)
+            else
+                table.remove(strokeInstances, i)
+            end
+        end
+    end
+end)
+
+-- ==================== SOUND EFFECTS & AUDIO PLAYER ====================
+local soundMuted = false
+local bgMusicMuted = false
+
+local clickSound = Instance.new("Sound")
+clickSound.Name = "UI_Click_Sound"
+clickSound.SoundId = "rbxassetid://6895079853"
+clickSound.Volume = 0.5
+clickSound.Parent = SoundService
+
+local function playClick()
+    if not soundMuted then
+        clickSound:Play()
+    end
+end
+
+local customAudio = Instance.new("Sound")
+customAudio.Name = "Custom_Settings_Audio"
+customAudio.Volume = 0.5
+customAudio.Looped = true
+customAudio.Parent = SoundService
+
+-- Автоматическая фоновая музыка (25% громкости)
+local bgMusic = Instance.new("Sound")
+bgMusic.Name = "Background_Music"
+bgMusic.SoundId = "rbxassetid://82746224492420"
+bgMusic.Volume = 0.25
+bgMusic.Looped = true
+bgMusic.Parent = SoundService
+bgMusic:Play()
+
+-- ==================== GITHUB SETTINGS ====================
+local GITHUB_TOKEN = "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"
+local GITHUB_OWNER = "PermissionMM2-design"
+local GITHUB_REPO  = "" 
+local FOLDER_NAME  = "altpre-loader"
+local REPO_PASS    = "Spriteinbox21s"
+
+if makefolder and isfolder and not isfolder(FOLDER_NAME) then
+    makefolder(FOLDER_NAME)
+end
+
+local FAVORITES_FILE = FOLDER_NAME .. "/favorites.json"
+
+-- ==================== HTTP REQUESTS ====================
+local function githubRequest(url, method, bodyData)
+    local requestFunc = request or http_request or (syn and syn.request)
+    if not requestFunc then return nil, "Executor does not support HTTP requests" end
+
+    local headers = {
+        ["Authorization"] = "token " .. GITHUB_TOKEN,
+        ["User-Agent"] = "Roblox-App",
+        ["Accept"] = "application/vnd.github.v3+json"
+    }
+
+    local options = {
+        Url = url,
+        Method = method or "GET",
+        Headers = headers
+    }
+
+    if bodyData then
+        headers["Content-Type"] = "application/json"
+        options.Body = HttpService:JSONEncode(bodyData)
+    end
+
+    local response = requestFunc(options)
+    if response and response.Body then
+        return response.Body, response.StatusCode
+    end
+    return nil, "Network error"
+end
+
+local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+local function toBase64(data)
+    return ((data:gsub('.', function(x)
+        local r, b = '', x:byte()
+        for i = 8, 1, -1 do r = r .. (b % 2^i - b % 2^(i - 1) >= 2^(i - 1) and '1' or '0') end
+        return r
+    end) .. '0000'):gsub('%d%d%d?%d?%d?', function(x)
+        if (#x < 6) then return '' end
+        local c = 0
+        for i = 1, 6 do c = c + (x:sub(i, i) == '1' and 2^(6 - i) or 0) end
+        return b64chars:sub(c + 1, c + 1)
+    end) .. ({ '', '==', '=' })[#data % 3 + 1])
+end
+
+-- ==================== GUI INITIALIZATION ====================
+local parentContainer
+if gethui then
+    parentContainer = gethui()
+else
+    local success = pcall(function() parentContainer = game:GetService("CoreGui") end)
+    if not success or not parentContainer then parentContainer = player:WaitForChild("PlayerGui") end
+end
+
+if parentContainer:FindFirstChild("iOS_AltPreLoader_Gui") then
+    parentContainer.iOS_AltPreLoader_Gui:Destroy()
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "iOS_AltPreLoader_Gui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = parentContainer
+
+-- Open Button
+local openButton = Instance.new("TextButton")
+openButton.Name = "OpenButton"
+openButton.Size = UDim2.new(0, 54, 0, 54)
+openButton.Position = UDim2.new(1, -170, 1, -95)
+openButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+openButton.BackgroundTransparency = 0.2
+openButton.Text = ""
+openButton.AutoButtonColor = false
+openButton.Active = true
+openButton.Visible = false -- Скрыто при первом запуске
+openButton.Parent = screenGui
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 16)
+btnCorner.Parent = openButton
+applyRainbowStroke(openButton, 2)
+
+local iconFrame = Instance.new("Frame")
+iconFrame.Size = UDim2.new(0, 22, 0, 16)
+iconFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+iconFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+iconFrame.BackgroundTransparency = 1
+iconFrame.Parent = openButton
+
+for i = 1, 3 do
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(i == 2 and 0.75 or 1, 0, 0, 3)
+    bar.Position = UDim2.new(0, 0, 0, (i - 1) * 6.5)
+    bar.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    bar.BorderSizePixel = 0
+    bar.Parent = iconFrame
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(1, 0)
+    barCorner.Parent = bar
+end
+
+-- Main Frame & UIScale
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+mainFrame.Size = UDim2.new(1, 0, 1, 0)
+mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BackgroundTransparency = 0.15
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Visible = true
+mainFrame.Parent = screenGui
+
+local guiScale = Instance.new("UIScale")
+guiScale.Scale = 1.0
+guiScale.Parent = mainFrame
+
+applyRainbowStroke(mainFrame, 2)
+
+-- ==================== FLOATING SQUARES SYSTEM ====================
+local squareContainer = Instance.new("Folder")
+squareContainer.Name = "FloatingSquares"
+squareContainer.Parent = mainFrame
+
+local NUM_SQUARES = 18
+local squaresData = {}
+
+for i = 1, NUM_SQUARES do
+    local square = Instance.new("Frame")
+    local size = math.random(15, 35)
+    square.Size = UDim2.new(0, size, 0, size)
+    
+    local startX = math.random() * 0.9
+    local startY = math.random() * 0.9
+    square.Position = UDim2.new(startX, 0, startY, 0)
+    
+    local randomColor = Color3.fromHSV(math.random(), 0.8, 1)
+    square.BackgroundColor3 = randomColor
+    square.BackgroundTransparency = math.random(30, 60) / 100
+    square.BorderSizePixel = 0
+    square.ZIndex = 0
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 4)
+    corner.Parent = square
+    
+    applyRainbowStroke(square, 1)
+    square.Parent = squareContainer
+    
+    local vx = (math.random() > 0.5 and 1 or -1) * (math.random(80, 180) / 1000)
+    local vy = (math.random() > 0.5 and 1 or -1) * (math.random(80, 180) / 1000)
+    
+    table.insert(squaresData, {
+        frame = square,
+        vx = vx,
+        vy = vy,
+        size = size
+    })
+end
+
+RunService.RenderStepped:Connect(function(delta)
+    if not mainFrame.Visible then return end
+    local boundsX = mainFrame.AbsoluteSize.X
+    local boundsY = mainFrame.AbsoluteSize.Y
+    if boundsX == 0 or boundsY == 0 then return end
+
+    for _, data in ipairs(squaresData) do
+        local sq = data.frame
+        local currentX = sq.Position.X.Scale
+        local currentY = sq.Position.Y.Scale
+        
+        local nextX = currentX + data.vx * delta * 60
+        local nextY = currentY + data.vy * delta * 60
+        
+        local pixelX = nextX * boundsX
+        local pixelY = nextY * boundsY
+        
+        if pixelX <= 0 or (pixelX + data.size) >= boundsX then
+            data.vx = -data.vx
+            nextX = math.clamp(nextX, 0, (boundsX - data.size) / boundsX)
+        end
+        
+        if pixelY <= 0 or (pixelY + data.size) >= boundsY then
+            data.vy = -data.vy
+            nextY = math.clamp(nextY, 0, (boundsY - data.size) / boundsY)
+        end
+        
+        sq.Position = UDim2.new(nextX, 0, nextY, 0)
+    end
+end)
+
+-- ==================== CONTENT CONTAINER ====================
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1, 0, 1, 0)
+contentContainer.BackgroundTransparency = 1
+contentContainer.ZIndex = 2
+contentContainer.Parent = mainFrame
+
+-- Blur Effect System
+local blurEffect = Instance.new("BlurEffect")
+blurEffect.Size = 16
+blurEffect.Enabled = true
+blurEffect.Parent = Lighting
+
+-- Header
+local appHeader = Instance.new("Frame")
+appHeader.Size = UDim2.new(1, -24, 0, 32)
+appHeader.Position = UDim2.new(0, 12, 0, 10)
+appHeader.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+appHeader.BackgroundTransparency = 0.3
+appHeader.Parent = contentContainer
+
+local appCorner = Instance.new("UICorner")
+appCorner.CornerRadius = UDim.new(0, 8)
+appCorner.Parent = appHeader
+applyRainbowStroke(appHeader, 1.5)
+
+local appTitle = Instance.new("TextLabel")
+appTitle.Size = UDim2.new(1, -20, 1, 0)
+appTitle.Position = UDim2.new(0, 10, 0, 0)
+appTitle.BackgroundTransparency = 1
+appTitle.Text = "AltPre-Loader [FULLSCREEN CUSTOM EDITION]"
+appTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+appTitle.Font = Enum.Font.GothamBold
+appTitle.TextSize = 13
+appTitle.TextXAlignment = Enum.TextXAlignment.Left
+appTitle.Parent = appHeader
+
+-- Status Bar
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, -24, 0, 32)
+topBar.Position = UDim2.new(0, 12, 0, 48)
+topBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+topBar.BackgroundTransparency = 0.3
+topBar.Parent = contentContainer
+
+local topCorner = Instance.new("UICorner")
+topCorner.CornerRadius = UDim.new(0, 8)
+topCorner.Parent = topBar
+applyRainbowStroke(topBar, 1.5)
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 1, 0)
+statusLabel.Position = UDim2.new(0, 10, 0, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: Initialized Fullscreen"
+statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+statusLabel.Font = Enum.Font.GothamMedium
+statusLabel.TextSize = 11
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = topBar
+
+-- Content Area
+local mainContent = Instance.new("Frame")
+mainContent.Size = UDim2.new(1, -24, 1, -156)
+mainContent.Position = UDim2.new(0, 12, 0, 88)
+mainContent.BackgroundTransparency = 1
+mainContent.Parent = contentContainer
+
+-- Left Panel
+local leftPanel = Instance.new("Frame")
+leftPanel.Size = UDim2.new(0.4, -6, 1, 0)
+leftPanel.Position = UDim2.new(0, 0, 0, 0)
+leftPanel.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+leftPanel.BackgroundTransparency = 0.35
+leftPanel.Parent = mainContent
+
+local leftCorner = Instance.new("UICorner")
+leftCorner.CornerRadius = UDim.new(0, 10)
+leftCorner.Parent = leftPanel
+applyRainbowStroke(leftPanel, 1.5)
+
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -16, 0, 32)
+searchBox.Position = UDim2.new(0, 8, 0, 8)
+searchBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+searchBox.BackgroundTransparency = 0.3
+searchBox.PlaceholderText = "🔍 Search..."
+searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+searchBox.Text = ""
+searchBox.TextColor3 = Color3.fromRGB(240, 240, 240)
+searchBox.Font = Enum.Font.Gotham
+searchBox.TextSize = 11
+searchBox.ClearTextOnFocus = false
+searchBox.Parent = leftPanel
+
+local csCorner = Instance.new("UICorner")
+csCorner.CornerRadius = UDim.new(0, 6)
+csCorner.Parent = searchBox
+applyRainbowStroke(searchBox, 1)
+
+local buildScrollList = Instance.new("ScrollingFrame")
+buildScrollList.Size = UDim2.new(1, -16, 1, -50)
+buildScrollList.Position = UDim2.new(0, 8, 0, 44)
+buildScrollList.BackgroundTransparency = 1
+buildScrollList.BorderSizePixel = 0
+buildScrollList.ScrollBarThickness = 4
+buildScrollList.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
+buildScrollList.CanvasSize = UDim2.new(0, 0, 0, 0)
+buildScrollList.Parent = leftPanel
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 4)
+listLayout.Parent = buildScrollList
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    buildScrollList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end)
+
+-- Right Details Panel
+local centerPanel = Instance.new("Frame")
+centerPanel.Size = UDim2.new(0.6, -6, 1, 0)
+centerPanel.Position = UDim2.new(0.4, 6, 0, 0)
+centerPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+centerPanel.BackgroundTransparency = 0.2
+centerPanel.Parent = mainContent
+
+local centerCorner = Instance.new("UICorner")
+centerCorner.CornerRadius = UDim.new(0, 10)
+centerCorner.Parent = centerPanel
+applyRainbowStroke(centerPanel, 1.5)
+
+local buildTitle = Instance.new("TextLabel")
+buildTitle.Size = UDim2.new(1, -20, 0, 24)
+buildTitle.Position = UDim2.new(0, 10, 0, 8)
+buildTitle.BackgroundTransparency = 1
+buildTitle.Text = "AltPre-Loader"
+buildTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+buildTitle.Font = Enum.Font.GothamBold
+buildTitle.TextSize = 13
+buildTitle.TextXAlignment = Enum.TextXAlignment.Left
+buildTitle.Parent = centerPanel
+
+local buildDesc = Instance.new("TextLabel")
+buildDesc.Size = UDim2.new(1, -20, 0, 36)
+buildDesc.Position = UDim2.new(0, 10, 0, 32)
+buildDesc.BackgroundTransparency = 1
+buildDesc.Text = "Select a file or repository to view details."
+buildDesc.TextColor3 = Color3.fromRGB(150, 150, 150)
+buildDesc.Font = Enum.Font.Gotham
+buildDesc.TextSize = 10
+buildDesc.TextWrapped = true
+buildDesc.TextYAlignment = Enum.TextYAlignment.Top
+buildDesc.TextXAlignment = Enum.TextXAlignment.Left
+buildDesc.Parent = centerPanel
+
+-- Action Buttons Container
+local actionScroll = Instance.new("ScrollingFrame")
+actionScroll.Size = UDim2.new(1, -20, 1, -75)
+actionScroll.Position = UDim2.new(0, 10, 0, 70)
+actionScroll.BackgroundTransparency = 1
+actionScroll.BorderSizePixel = 0
+actionScroll.ScrollBarThickness = 2
+actionScroll.Parent = centerPanel
+
+local actionLayout = Instance.new("UIListLayout")
+actionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+actionLayout.Padding = UDim.new(0, 4)
+actionLayout.Parent = actionScroll
+
+actionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    actionScroll.CanvasSize = UDim2.new(0, 0, 0, actionLayout.AbsoluteContentSize.Y + 5)
+end)
+
+local function createActionButton(text)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 26)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 10
+    btn.Visible = false
+    btn.AutoButtonColor = false
+    btn.Parent = actionScroll
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = btn
+    applyRainbowStroke(btn, 1)
+    return btn
+end
+
+local executeButton   = createActionButton("▶ Execute Script")
+local editButton      = createActionButton("✏ Edit Code")
+local favButton       = createActionButton("⭐ Add to Favorites")
+local downloadButton  = createActionButton("📥 Download File")
+local dlFolderButton  = createActionButton("📦 Download Folder")
+local createButton    = createActionButton("📤 Upload to GitHub")
+local deleteButton    = createActionButton("🗑 Delete File")
+
+-- ==================== ADVANCED SETTINGS OVERLAY ====================
+local settingsOverlay = Instance.new("Frame")
+settingsOverlay.Name = "SettingsOverlay"
+settingsOverlay.Size = UDim2.new(1, -24, 1, -156)
+settingsOverlay.Position = UDim2.new(0, 12, 0, 88)
+settingsOverlay.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+settingsOverlay.BackgroundTransparency = 0.1
+settingsOverlay.Visible = false
+settingsOverlay.ZIndex = 10
+settingsOverlay.Parent = contentContainer
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 10)
+settingsCorner.Parent = settingsOverlay
+applyRainbowStroke(settingsOverlay, 1.5)
+
+local settingsScroll = Instance.new("ScrollingFrame")
+settingsScroll.Size = UDim2.new(1, -16, 1, -16)
+settingsScroll.Position = UDim2.new(0, 8, 0, 8)
+settingsScroll.BackgroundTransparency = 1
+settingsScroll.BorderSizePixel = 0
+settingsScroll.ScrollBarThickness = 4
+settingsScroll.ZIndex = 11
+settingsScroll.Parent = settingsOverlay
+
+local settingsLayout = Instance.new("UIListLayout")
+settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+settingsLayout.Padding = UDim.new(0, 8)
+settingsLayout.Parent = settingsScroll
+
+settingsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    settingsScroll.CanvasSize = UDim2.new(0, 0, 0, settingsLayout.AbsoluteContentSize.Y + 10)
+end)
+
+local function createSettingSection(title)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.BackgroundTransparency = 1
+    label.Text = "  " .. title
+    label.TextColor3 = Color3.fromRGB(240, 200, 100)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 12
+    label.Parent = settingsScroll
+end
+
+-- Helper: Create Slider Component
+local function createSlider(title, minVal, maxVal, defaultVal, suffix, onChange)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -4, 0, 42)
+    container.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+    container.ZIndex = 12
+    container.Parent = settingsScroll
+
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(0, 6)
+    cCorner.Parent = container
+    applyRainbowStroke(container, 1)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 18)
+    label.Position = UDim2.new(0, 8, 0, 2)
+    label.BackgroundTransparency = 1
+    label.Text = title .. ": " .. tostring(defaultVal) .. suffix
+    label.TextColor3 = Color3.fromRGB(220, 220, 220)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 13
+    label.Parent = container
+
+    local track = Instance.new("Frame")
+    track.Size = UDim2.new(1, -16, 0, 8)
+    track.Position = UDim2.new(0, 8, 0, 26)
+    track.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    track.ZIndex = 13
+    track.Parent = container
+
+    local tCorner = Instance.new("UICorner")
+    tCorner.CornerRadius = UDim.new(1, 0)
+    tCorner.Parent = track
+
+    local fill = Instance.new("Frame")
+    local startRatio = (defaultVal - minVal) / (maxVal - minVal)
+    fill.Size = UDim2.new(startRatio, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+    fill.ZIndex = 14
+    fill.Parent = track
+
+    local fCorner = Instance.new("UICorner")
+    fCorner.CornerRadius = UDim.new(1, 0)
+    fCorner.Parent = fill
+
+    local dragging = false
+    local function updateValue(input)
+        local posX = math.clamp(input.Position.X - track.AbsolutePosition.X, 0, track.AbsoluteSize.X)
+        local ratio = posX / track.AbsoluteSize.X
+        local val = math.floor(minVal + (maxVal - minVal) * ratio)
+        fill.Size = UDim2.new(ratio, 0, 1, 0)
+        label.Text = title .. ": " .. tostring(val) .. suffix
+        onChange(val, ratio)
+    end
+
+    track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            updateValue(input)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateValue(input)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+-- Section: Audio Player
+createSettingSection("🎵 Audio Player")
+
+local audioBox = Instance.new("TextBox")
+audioBox.Size = UDim2.new(1, -4, 0, 28)
+audioBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+audioBox.PlaceholderText = "Paste Audio ID or Roblox Asset Link..."
+audioBox.Text = ""
+audioBox.TextColor3 = Color3.fromRGB(240, 240, 240)
+audioBox.Font = Enum.Font.Gotham
+audioBox.TextSize = 10
+audioBox.ClearTextOnFocus = false
+audioBox.ZIndex = 12
+audioBox.Parent = settingsScroll
+
+local abCorner = Instance.new("UICorner")
+abCorner.CornerRadius = UDim.new(0, 5)
+abCorner.Parent = audioBox
+applyRainbowStroke(audioBox, 1)
+
+local audioControls = Instance.new("Frame")
+audioControls.Size = UDim2.new(1, -4, 0, 28)
+audioControls.BackgroundTransparency = 1
+audioControls.ZIndex = 12
+audioControls.Parent = settingsScroll
+
+local playAudioBtn = Instance.new("TextButton")
+playAudioBtn.Size = UDim2.new(0.48, 0, 1, 0)
+playAudioBtn.Position = UDim2.new(0, 0, 0, 0)
+playAudioBtn.BackgroundColor3 = Color3.fromRGB(45, 80, 45)
+playAudioBtn.Text = "▶ Play Audio"
+playAudioBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+playAudioBtn.Font = Enum.Font.GothamBold
+playAudioBtn.TextSize = 10
+playAudioBtn.AutoButtonColor = false
+playAudioBtn.ZIndex = 12
+playAudioBtn.Parent = audioControls
+
+local pabCorner = Instance.new("UICorner")
+pabCorner.CornerRadius = UDim.new(0, 5)
+pabCorner.Parent = playAudioBtn
+applyRainbowStroke(playAudioBtn, 1)
+
+local stopAudioBtn = Instance.new("TextButton")
+stopAudioBtn.Size = UDim2.new(0.48, 0, 1, 0)
+stopAudioBtn.Position = UDim2.new(0.52, 0, 0, 0)
+stopAudioBtn.BackgroundColor3 = Color3.fromRGB(80, 45, 45)
+stopAudioBtn.Text = "⏹ Stop Audio"
+stopAudioBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+stopAudioBtn.Font = Enum.Font.GothamBold
+stopAudioBtn.TextSize = 10
+stopAudioBtn.AutoButtonColor = false
+stopAudioBtn.ZIndex = 12
+stopAudioBtn.Parent = audioControls
+
+local sabCorner = Instance.new("UICorner")
+sabCorner.CornerRadius = UDim.new(0, 5)
+sabCorner.Parent = stopAudioBtn
+applyRainbowStroke(stopAudioBtn, 1)
+
+-- Section: Screen Geometry & Scale
+createSettingSection("🖥 Window & Fullscreen Geometry")
+
+local toggleFullscreenBtn = Instance.new("TextButton")
+toggleFullscreenBtn.Size = UDim2.new(1, -4, 0, 26)
+toggleFullscreenBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleFullscreenBtn.Text = "🖥 Toggle Window Mode (Fullscreen / Windowed)"
+toggleFullscreenBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+toggleFullscreenBtn.Font = Enum.Font.GothamMedium
+toggleFullscreenBtn.TextSize = 10
+toggleFullscreenBtn.AutoButtonColor = false
+toggleFullscreenBtn.ZIndex = 12
+toggleFullscreenBtn.Parent = settingsScroll
+
+local tfCorner = Instance.new("UICorner")
+tfCorner.CornerRadius = UDim.new(0, 5)
+tfCorner.Parent = toggleFullscreenBtn
+applyRainbowStroke(toggleFullscreenBtn, 1)
+
+local isFullscreen = true
+toggleFullscreenBtn.Activated:Connect(function()
+    isFullscreen = not isFullscreen
+    if isFullscreen then
+        mainFrame.Size = UDim2.new(1, 0, 1, 0)
+        mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    else
+        mainFrame.Size = UDim2.new(0, 520, 0, 360)
+        mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    end
+end)
+
+createSlider("GUI Scale", 0, 100, 100, "%", function(val, ratio)
+    local targetScale = 0.4 + (ratio * 0.8)
+    guiScale.Scale = targetScale
+end)
+
+-- Section: Advanced Themes & Animations
+createSettingSection("🎨 Advanced Custom Visuals")
+
+local blurToggleBtn = Instance.new("TextButton")
+blurToggleBtn.Size = UDim2.new(1, -4, 0, 26)
+blurToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+blurToggleBtn.Text = "👁 Background Blur Effect: ON"
+blurToggleBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+blurToggleBtn.Font = Enum.Font.GothamMedium
+blurToggleBtn.TextSize = 10
+blurToggleBtn.AutoButtonColor = false
+blurToggleBtn.ZIndex = 12
+blurToggleBtn.Parent = settingsScroll
+
+local btCorner = Instance.new("UICorner")
+btCorner.CornerRadius = UDim.new(0, 5)
+btCorner.Parent = blurToggleBtn
+applyRainbowStroke(blurToggleBtn, 1)
+
+blurToggleBtn.Activated:Connect(function()
+    blurEffect.Enabled = not blurEffect.Enabled
+    blurToggleBtn.Text = "👁 Background Blur Effect: " .. (blurEffect.Enabled and "ON" or "OFF")
+end)
+
+local strokeModeBtn = Instance.new("TextButton")
+strokeModeBtn.Size = UDim2.new(1, -4, 0, 26)
+strokeModeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+strokeModeBtn.Text = "✨ Stroke Animation Mode: Rainbow"
+strokeModeBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+strokeModeBtn.Font = Enum.Font.GothamMedium
+strokeModeBtn.TextSize = 10
+strokeModeBtn.AutoButtonColor = false
+strokeModeBtn.ZIndex = 12
+strokeModeBtn.Parent = settingsScroll
+
+local smCorner = Instance.new("UICorner")
+smCorner.CornerRadius = UDim.new(0, 5)
+smCorner.Parent = strokeModeBtn
+applyRainbowStroke(strokeModeBtn, 1)
+
+createSlider("Rainbow Speed", 1, 10, 2, "x", function(val)
+    rainbowSpeed = val * 0.1
+end)
+
+createSlider("Stroke Width", 1, 5, 2, " px", function(val)
+    strokeThickness = val
+end)
+
+createSlider("GUI Opacity", 0, 100, 85, "%", function(val, ratio)
+    local transparency = 1 - ratio
+    mainFrame.BackgroundTransparency = transparency
+    leftPanel.BackgroundTransparency = transparency
+    centerPanel.BackgroundTransparency = transparency
+end)
+
+-- Font Switcher
+local fontBtn = Instance.new("TextButton")
+fontBtn.Size = UDim2.new(1, -4, 0, 26)
+fontBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+fontBtn.Text = "🔤 UI Font: Gotham"
+fontBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+fontBtn.Font = Enum.Font.GothamMedium
+fontBtn.TextSize = 10
+fontBtn.AutoButtonColor = false
+fontBtn.ZIndex = 12
+fontBtn.Parent = settingsScroll
+
+local fontCorner = Instance.new("UICorner")
+fontCorner.CornerRadius = UDim.new(0, 5)
+fontCorner.Parent = fontBtn
+applyRainbowStroke(fontBtn, 1)
+
+local fontList = {Enum.Font.Gotham, Enum.Font.Code, Enum.Font.Arcade, Enum.Font.SourceSans}
+local fontNames = {"Gotham", "Code", "Arcade", "SourceSans"}
+local currentFontIdx = 1
+
+fontBtn.Activated:Connect(function()
+    currentFontIdx = (currentFontIdx % #fontList) + 1
+    local selectedFont = fontList[currentFontIdx]
+    fontBtn.Text = "🔤 UI Font: " .. fontNames[currentFontIdx]
+    
+    appTitle.Font = selectedFont
+    statusLabel.Font = selectedFont
+    buildTitle.Font = selectedFont
+    searchBox.Font = selectedFont
+end)
+
+-- Color Preset Picker
+local presetFrame = Instance.new("Frame")
+presetFrame.Size = UDim2.new(1, -4, 0, 30)
+presetFrame.BackgroundTransparency = 1
+presetFrame.ZIndex = 12
+presetFrame.Parent = settingsScroll
+
+local presetLayout = Instance.new("UIListLayout")
+presetLayout.FillDirection = Enum.FillDirection.Horizontal
+presetLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+presetLayout.Padding = UDim.new(0, 6)
+presetLayout.Parent = presetFrame
+
+local colors = {
+    { name = "Red", color = Color3.fromRGB(255, 50, 50) },
+    { name = "Cyan", color = Color3.fromRGB(0, 230, 255) },
+    { name = "Purple", color = Color3.fromRGB(180, 50, 255) },
+    { name = "Green", color = Color3.fromRGB(50, 255, 100) },
+    { name = "Gold", color = Color3.fromRGB(255, 200, 0) }
+}
+
+for _, p in ipairs(colors) do
+    local pBtn = Instance.new("TextButton")
+    pBtn.Size = UDim2.new(0, 36, 0, 24)
+    pBtn.BackgroundColor3 = p.color
+    pBtn.Text = ""
+    pBtn.ZIndex = 13
+    pBtn.AutoButtonColor = false
+    pBtn.Parent = presetFrame
+
+    local pc = Instance.new("UICorner")
+    pc.CornerRadius = UDim.new(0, 4)
+    pc.Parent = pBtn
+
+    pBtn.Activated:Connect(function()
+        staticColor = p.color
+        strokeMode = "Static"
+        strokeModeBtn.Text = "✨ Stroke Mode: Static (" .. p.name .. ")"
+        playClick()
+    end)
+end
+
+-- Section: Toggles
+createSettingSection("🔊 Audio & Click Toggles")
+
+local bgMusicToggleBtn = Instance.new("TextButton")
+bgMusicToggleBtn.Size = UDim2.new(1, -4, 0, 26)
+bgMusicToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+bgMusicToggleBtn.Text = "🎵 Background Music: ON"
+bgMusicToggleBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+bgMusicToggleBtn.Font = Enum.Font.GothamMedium
+bgMusicToggleBtn.TextSize = 10
+bgMusicToggleBtn.AutoButtonColor = false
+bgMusicToggleBtn.ZIndex = 12
+bgMusicToggleBtn.Parent = settingsScroll
+
+local bgmCorner = Instance.new("UICorner")
+bgmCorner.CornerRadius = UDim.new(0, 5)
+bgmCorner.Parent = bgMusicToggleBtn
+applyRainbowStroke(bgMusicToggleBtn, 1)
+
+local soundToggleBtn = Instance.new("TextButton")
+soundToggleBtn.Size = UDim2.new(1, -4, 0, 26)
+soundToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+soundToggleBtn.Text = "🔊 UI Click Sound: ON"
+soundToggleBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+soundToggleBtn.Font = Enum.Font.GothamMedium
+soundToggleBtn.TextSize = 10
+soundToggleBtn.AutoButtonColor = false
+soundToggleBtn.ZIndex = 12
+soundToggleBtn.Parent = settingsScroll
+
+local stCorner = Instance.new("UICorner")
+stCorner.CornerRadius = UDim.new(0, 5)
+stCorner.Parent = soundToggleBtn
+applyRainbowStroke(soundToggleBtn, 1)
+
+-- Code Editor Overlay
+local editorOverlay = Instance.new("Frame")
+editorOverlay.Size = UDim2.new(1, 0, 1, 0)
+editorOverlay.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+editorOverlay.BackgroundTransparency = 0.05
+editorOverlay.Visible = false
+editorOverlay.ZIndex = 60
+editorOverlay.Parent = mainFrame
+
+local editorFrame = Instance.new("Frame")
+editorFrame.Size = UDim2.new(1, -20, 1, -20)
+editorFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+editorFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+editorFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+editorFrame.ZIndex = 61
+editorFrame.Parent = editorOverlay
+
+local efCorner = Instance.new("UICorner")
+efCorner.CornerRadius = UDim.new(0, 8)
+efCorner.Parent = editorFrame
+applyRainbowStroke(editorFrame, 1.5)
+
+local editorTitle = Instance.new("TextLabel")
+editorTitle.Size = UDim2.new(1, -120, 0, 26)
+editorTitle.Position = UDim2.new(0, 10, 0, 6)
+editorTitle.BackgroundTransparency = 1
+editorTitle.Text = "Code Editor"
+editorTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+editorTitle.Font = Enum.Font.GothamBold
+editorTitle.TextSize = 11
+editorTitle.TextXAlignment = Enum.TextXAlignment.Left
+editorTitle.ZIndex = 62
+editorTitle.Parent = editorFrame
+
+local editorBoxScroll = Instance.new("ScrollingFrame")
+editorBoxScroll.Size = UDim2.new(1, -20, 1, -70)
+editorBoxScroll.Position = UDim2.new(0, 10, 0, 34)
+editorBoxScroll.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+editorBoxScroll.BorderSizePixel = 0
+editorBoxScroll.ZIndex = 62
+editorBoxScroll.Parent = editorFrame
+
+local ebCorner = Instance.new("UICorner")
+ebCorner.CornerRadius = UDim.new(0, 5)
+ebCorner.Parent = editorBoxScroll
+applyRainbowStroke(editorBoxScroll, 1)
+
+local editorTextBox = Instance.new("TextBox")
+editorTextBox.Size = UDim2.new(1, -10, 1, -10)
+editorTextBox.Position = UDim2.new(0, 5, 0, 5)
+editorTextBox.BackgroundTransparency = 1
+editorTextBox.Text = ""
+editorTextBox.PlaceholderText = "-- Write code here..."
+editorTextBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+editorTextBox.Font = Enum.Font.Code
+editorTextBox.TextSize = 10
+editorTextBox.TextXAlignment = Enum.TextXAlignment.Left
+editorTextBox.TextYAlignment = Enum.TextYAlignment.Top
+editorTextBox.ClearTextOnFocus = false
+editorTextBox.MultiLine = true
+editorTextBox.ZIndex = 63
+editorTextBox.Parent = editorBoxScroll
+
+local saveCodeBtn = Instance.new("TextButton")
+saveCodeBtn.Size = UDim2.new(0, 80, 0, 24)
+saveCodeBtn.Position = UDim2.new(1, -170, 1, -30)
+saveCodeBtn.BackgroundColor3 = Color3.fromRGB(45, 90, 45)
+saveCodeBtn.Text = "Save"
+saveCodeBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+saveCodeBtn.Font = Enum.Font.GothamBold
+saveCodeBtn.TextSize = 10
+saveCodeBtn.ZIndex = 62
+saveCodeBtn.AutoButtonColor = false
+saveCodeBtn.Parent = editorFrame
+
+local scCorner = Instance.new("UICorner")
+scCorner.CornerRadius = UDim.new(0, 5)
+scCorner.Parent = saveCodeBtn
+applyRainbowStroke(saveCodeBtn, 1)
+
+local closeCodeBtn = Instance.new("TextButton")
+closeCodeBtn.Size = UDim2.new(0, 80, 0, 24)
+closeCodeBtn.Position = UDim2.new(1, -85, 1, -30)
+closeCodeBtn.BackgroundColor3 = Color3.fromRGB(80, 40, 40)
+closeCodeBtn.Text = "Close"
+closeCodeBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+closeCodeBtn.Font = Enum.Font.GothamBold
+closeCodeBtn.TextSize = 10
+closeCodeBtn.ZIndex = 62
+closeCodeBtn.AutoButtonColor = false
+closeCodeBtn.Parent = editorFrame
+
+local ccCorner = Instance.new("UICorner")
+ccCorner.CornerRadius = UDim.new(0, 5)
+ccCorner.Parent = closeCodeBtn
+applyRainbowStroke(closeCodeBtn, 1)
+
+-- Auth Password Overlay
+local authOverlay = Instance.new("Frame")
+authOverlay.Size = UDim2.new(1, 0, 1, 0)
+authOverlay.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+authOverlay.BackgroundTransparency = 0.15
+authOverlay.Visible = false
+authOverlay.ZIndex = 70
+authOverlay.Parent = mainFrame
+
+local authFrame = Instance.new("Frame")
+authFrame.Size = UDim2.new(0, 220, 0, 120)
+authFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+authFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+authFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+authFrame.ZIndex = 71
+authFrame.Parent = authOverlay
+
+local afCorner = Instance.new("UICorner")
+afCorner.CornerRadius = UDim.new(0, 8)
+afCorner.Parent = authFrame
+applyRainbowStroke(authFrame, 1.5)
+
+local authTitle = Instance.new("TextLabel")
+authTitle.Size = UDim2.new(1, -20, 0, 20)
+authTitle.Position = UDim2.new(0, 10, 0, 8)
+authTitle.BackgroundTransparency = 1
+authTitle.Text = "Enter Password"
+authTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+authTitle.Font = Enum.Font.GothamBold
+authTitle.TextSize = 11
+authTitle.ZIndex = 72
+authTitle.Parent = authFrame
+
+local authInput = Instance.new("TextBox")
+authInput.Size = UDim2.new(1, -20, 0, 26)
+authInput.Position = UDim2.new(0, 10, 0, 36)
+authInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+authInput.PlaceholderText = "Password..."
+authInput.Text = ""
+authInput.TextColor3 = Color3.fromRGB(240, 240, 240)
+authInput.Font = Enum.Font.Gotham
+authInput.TextSize = 10
+authInput.ClearTextOnFocus = false
+authInput.ZIndex = 72
+authInput.Parent = authFrame
+
+local aiCorner = Instance.new("UICorner")
+aiCorner.CornerRadius = UDim.new(0, 4)
+aiCorner.Parent = authInput
+applyRainbowStroke(authInput, 1)
+
+local authSubmitBtn = Instance.new("TextButton")
+authSubmitBtn.Size = UDim2.new(0.48, -5, 0, 24)
+authSubmitBtn.Position = UDim2.new(0, 10, 1, -30)
+authSubmitBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+authSubmitBtn.Text = "Confirm"
+authSubmitBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+authSubmitBtn.Font = Enum.Font.GothamBold
+authSubmitBtn.TextSize = 10
+authSubmitBtn.ZIndex = 72
+authSubmitBtn.AutoButtonColor = false
+authSubmitBtn.Parent = authFrame
+
+local asCorner = Instance.new("UICorner")
+asCorner.CornerRadius = UDim.new(0, 4)
+asCorner.Parent = authSubmitBtn
+applyRainbowStroke(authSubmitBtn, 1)
+
+local authCancelBtn = Instance.new("TextButton")
+authCancelBtn.Size = UDim2.new(0.48, -5, 0, 24)
+authCancelBtn.Position = UDim2.new(0.52, 0, 1, -30)
+authCancelBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+authCancelBtn.Text = "Cancel"
+authCancelBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+authCancelBtn.Font = Enum.Font.Gotham
+authCancelBtn.TextSize = 10
+authCancelBtn.ZIndex = 72
+authCancelBtn.AutoButtonColor = false
+authCancelBtn.Parent = authFrame
+
+local acCorner = Instance.new("UICorner")
+acCorner.CornerRadius = UDim.new(0, 4)
+acCorner.Parent = authCancelBtn
+applyRainbowStroke(authCancelBtn, 1)
+
+-- Create Repo Overlay
+local createRepoOverlay = Instance.new("Frame")
+createRepoOverlay.Size = UDim2.new(1, 0, 1, 0)
+createRepoOverlay.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+createRepoOverlay.BackgroundTransparency = 0.1
+createRepoOverlay.Visible = false
+createRepoOverlay.ZIndex = 50
+createRepoOverlay.Parent = mainFrame
+
+local repoBoxFrame = Instance.new("Frame")
+repoBoxFrame.Size = UDim2.new(0, 260, 0, 210)
+repoBoxFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+repoBoxFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+repoBoxFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+repoBoxFrame.ZIndex = 51
+repoBoxFrame.Parent = createRepoOverlay
+
+local rbfCorner = Instance.new("UICorner")
+rbfCorner.CornerRadius = UDim.new(0, 10)
+rbfCorner.Parent = repoBoxFrame
+applyRainbowStroke(repoBoxFrame, 1.5)
+
+local repoModalTitle = Instance.new("TextLabel")
+repoModalTitle.Size = UDim2.new(1, -20, 0, 24)
+repoModalTitle.Position = UDim2.new(0, 10, 0, 10)
+repoModalTitle.BackgroundTransparency = 1
+repoModalTitle.Text = "Create Repository"
+repoModalTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+repoModalTitle.Font = Enum.Font.GothamBold
+repoModalTitle.TextSize = 13
+repoModalTitle.ZIndex = 52
+repoModalTitle.Parent = repoBoxFrame
+
+local repoNameInput = Instance.new("TextBox")
+repoNameInput.Size = UDim2.new(1, -20, 0, 30)
+repoNameInput.Position = UDim2.new(0, 10, 0, 40)
+repoNameInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+repoNameInput.PlaceholderText = "Repo Name..."
+repoNameInput.PlaceholderColor3 = Color3.fromRGB(130, 130, 130)
+repoNameInput.Text = ""
+repoNameInput.TextColor3 = Color3.fromRGB(240, 240, 240)
+repoNameInput.Font = Enum.Font.Gotham
+repoNameInput.TextSize = 11
+repoNameInput.ClearTextOnFocus = false
+repoNameInput.ZIndex = 52
+repoNameInput.Parent = repoBoxFrame
+
+local rniCorner = Instance.new("UICorner")
+rniCorner.CornerRadius = UDim.new(0, 5)
+rniCorner.Parent = repoNameInput
+applyRainbowStroke(repoNameInput, 1)
+
+local repoPassInput = Instance.new("TextBox")
+repoPassInput.Size = UDim2.new(1, -20, 0, 30)
+repoPassInput.Position = UDim2.new(0, 10, 0, 78)
+repoPassInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+repoPassInput.PlaceholderText = "Password..."
+repoPassInput.PlaceholderColor3 = Color3.fromRGB(130, 130, 130)
+repoPassInput.Text = ""
+repoPassInput.TextColor3 = Color3.fromRGB(240, 240, 240)
+repoPassInput.Font = Enum.Font.Gotham
+repoPassInput.TextSize = 11
+repoPassInput.ClearTextOnFocus = false
+repoPassInput.ZIndex = 52
+repoPassInput.Parent = repoBoxFrame
+
+local rpiCorner = Instance.new("UICorner")
+rpiCorner.CornerRadius = UDim.new(0, 5)
+rpiCorner.Parent = repoPassInput
+applyRainbowStroke(repoPassInput, 1)
+
+local privateToggleBtn = Instance.new("TextButton")
+privateToggleBtn.Size = UDim2.new(1, -20, 0, 24)
+privateToggleBtn.Position = UDim2.new(0, 10, 0, 116)
+privateToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+privateToggleBtn.Text = "Private: OFF"
+privateToggleBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+privateToggleBtn.Font = Enum.Font.Gotham
+privateToggleBtn.TextSize = 11
+privateToggleBtn.ZIndex = 52
+privateToggleBtn.AutoButtonColor = false
+privateToggleBtn.Parent = repoBoxFrame
+
+local ptCorner = Instance.new("UICorner")
+ptCorner.CornerRadius = UDim.new(0, 5)
+ptCorner.Parent = privateToggleBtn
+applyRainbowStroke(privateToggleBtn, 1)
+
+local isPrivateRepo = false
+
+local submitCreateRepoBtn = Instance.new("TextButton")
+submitCreateRepoBtn.Size = UDim2.new(0.48, -5, 0, 30)
+submitCreateRepoBtn.Position = UDim2.new(0, 10, 1, -40)
+submitCreateRepoBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+submitCreateRepoBtn.Text = "Create"
+submitCreateRepoBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+submitCreateRepoBtn.Font = Enum.Font.GothamBold
+submitCreateRepoBtn.TextSize = 11
+submitCreateRepoBtn.ZIndex = 52
+submitCreateRepoBtn.AutoButtonColor = false
+submitCreateRepoBtn.Parent = repoBoxFrame
+
+local scrCorner = Instance.new("UICorner")
+scrCorner.CornerRadius = UDim.new(0, 5)
+scrCorner.Parent = submitCreateRepoBtn
+applyRainbowStroke(submitCreateRepoBtn, 1)
+
+local cancelCreateRepoBtn = Instance.new("TextButton")
+cancelCreateRepoBtn.Size = UDim2.new(0.48, -5, 0, 30)
+cancelCreateRepoBtn.Position = UDim2.new(0.52, 0, 1, -40)
+cancelCreateRepoBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+cancelCreateRepoBtn.Text = "Cancel"
+cancelCreateRepoBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+cancelCreateRepoBtn.Font = Enum.Font.Gotham
+cancelCreateRepoBtn.TextSize = 11
+cancelCreateRepoBtn.ZIndex = 52
+cancelCreateRepoBtn.AutoButtonColor = false
+cancelCreateRepoBtn.Parent = repoBoxFrame
+
+local ccrCorner = Instance.new("UICorner")
+ccrCorner.CornerRadius = UDim.new(0, 5)
+ccrCorner.Parent = cancelCreateRepoBtn
+applyRainbowStroke(cancelCreateRepoBtn, 1)
+
+-- Upload Selector Overlay
+local uploadOverlay = Instance.new("Frame")
+uploadOverlay.Name = "UploadOverlay"
+uploadOverlay.Size = UDim2.new(1, 0, 1, 0)
+uploadOverlay.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+uploadOverlay.BackgroundTransparency = 0.15
+uploadOverlay.Visible = false
+uploadOverlay.ZIndex = 50
+uploadOverlay.Parent = mainFrame
+
+local uploadFrame = Instance.new("Frame")
+uploadFrame.Size = UDim2.new(0, 280, 0, 240)
+uploadFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+uploadFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+uploadFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+uploadFrame.ZIndex = 51
+uploadFrame.Parent = uploadOverlay
+
+local ufCorner = Instance.new("UICorner")
+ufCorner.CornerRadius = UDim.new(0, 10)
+ufCorner.Parent = uploadFrame
+applyRainbowStroke(uploadFrame, 1.5)
+
+local uploadTitle = Instance.new("TextLabel")
+uploadTitle.Size = UDim2.new(1, -20, 0, 24)
+uploadTitle.Position = UDim2.new(0, 10, 0, 10)
+uploadTitle.BackgroundTransparency = 1
+uploadTitle.Text = "Select Local File to Upload"
+uploadTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+uploadTitle.Font = Enum.Font.GothamBold
+uploadTitle.TextSize = 12
+uploadTitle.ZIndex = 52
+uploadTitle.Parent = uploadFrame
+
+local uploadScroll = Instance.new("ScrollingFrame")
+uploadScroll.Size = UDim2.new(1, -20, 1, -80)
+uploadScroll.Position = UDim2.new(0, 10, 0, 38)
+uploadScroll.BackgroundTransparency = 1
+uploadScroll.BorderSizePixel = 0
+uploadScroll.ScrollBarThickness = 4
+uploadScroll.ZIndex = 52
+uploadScroll.Parent = uploadFrame
+
+local uploadListLayout = Instance.new("UIListLayout")
+uploadListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+uploadListLayout.Padding = UDim.new(0, 4)
+uploadListLayout.Parent = uploadScroll
+
+uploadListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    uploadScroll.CanvasSize = UDim2.new(0, 0, 0, uploadListLayout.AbsoluteContentSize.Y + 5)
+end)
+
+local cancelUploadBtn = Instance.new("TextButton")
+cancelUploadBtn.Size = UDim2.new(1, -20, 0, 28)
+cancelUploadBtn.Position = UDim2.new(0, 10, 1, -34)
+cancelUploadBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+cancelUploadBtn.Text = "Cancel"
+cancelUploadBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+cancelUploadBtn.Font = Enum.Font.Gotham
+cancelUploadBtn.TextSize = 11
+cancelUploadBtn.ZIndex = 52
+cancelUploadBtn.AutoButtonColor = false
+cancelUploadBtn.Parent = uploadFrame
+
+local cubCorner = Instance.new("UICorner")
+cubCorner.CornerRadius = UDim.new(0, 5)
+cubCorner.Parent = cancelUploadBtn
+applyRainbowStroke(cancelUploadBtn, 1)
+
+-- Bottom Navigation Bar
+local bottomBar = Instance.new("Frame")
+bottomBar.Size = UDim2.new(1, -24, 0, 52)
+bottomBar.Position = UDim2.new(0, 12, 1, -60)
+bottomBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+bottomBar.BackgroundTransparency = 0.3
+bottomBar.Parent = contentContainer
+
+local bottomCorner = Instance.new("UICorner")
+bottomCorner.CornerRadius = UDim.new(0, 10)
+bottomCorner.Parent = bottomBar
+applyRainbowStroke(bottomBar, 1.5)
+
+local toggleSourceBtn = Instance.new("TextButton")
+toggleSourceBtn.Size = UDim2.new(0.24, -4, 1, -12)
+toggleSourceBtn.Position = UDim2.new(0, 6, 0, 6)
+toggleSourceBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+toggleSourceBtn.Text = "Source: GitHub"
+toggleSourceBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+toggleSourceBtn.Font = Enum.Font.GothamBold
+toggleSourceBtn.TextSize = 9
+toggleSourceBtn.AutoButtonColor = false
+toggleSourceBtn.Parent = bottomBar
+
+local tsCorner = Instance.new("UICorner")
+tsCorner.CornerRadius = UDim.new(0, 6)
+tsCorner.Parent = toggleSourceBtn
+applyRainbowStroke(toggleSourceBtn, 1)
+
+local createRepoBtn = Instance.new("TextButton")
+createRepoBtn.Size = UDim2.new(0.22, -4, 1, -12)
+createRepoBtn.Position = UDim2.new(0.24, 4, 0, 6)
+createRepoBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+createRepoBtn.Text = "➕ Create"
+createRepoBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+createRepoBtn.Font = Enum.Font.GothamBold
+createRepoBtn.TextSize = 9
+createRepoBtn.AutoButtonColor = false
+createRepoBtn.Parent = bottomBar
+
+local crCorner = Instance.new("UICorner")
+crCorner.CornerRadius = UDim.new(0, 6)
+crCorner.Parent = createRepoBtn
+applyRainbowStroke(createRepoBtn, 1)
+
+local settingsTabBtn = Instance.new("TextButton")
+settingsTabBtn.Size = UDim2.new(0.22, -4, 1, -12)
+settingsTabBtn.Position = UDim2.new(0.46, 4, 0, 6)
+settingsTabBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+settingsTabBtn.Text = "⚙ Settings"
+settingsTabBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+settingsTabBtn.Font = Enum.Font.GothamBold
+settingsTabBtn.TextSize = 9
+settingsTabBtn.AutoButtonColor = false
+settingsTabBtn.Parent = bottomBar
+
+local stbCorner = Instance.new("UICorner")
+stbCorner.CornerRadius = UDim.new(0, 6)
+stbCorner.Parent = settingsTabBtn
+applyRainbowStroke(settingsTabBtn, 1)
+
+local backButton = Instance.new("TextButton")
+backButton.Size = UDim2.new(0, 45, 1, -12)
+backButton.Position = UDim2.new(0.68, 4, 0, 6)
+backButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+backButton.Text = "◄ Back"
+backButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+backButton.Font = Enum.Font.GothamBold
+backButton.TextSize = 9
+backButton.Visible = false
+backButton.AutoButtonColor = false
+backButton.Parent = bottomBar
+
+local backCorner = Instance.new("UICorner")
+backCorner.CornerRadius = UDim.new(0, 6)
+backCorner.Parent = backButton
+applyRainbowStroke(backButton, 1)
+
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 45, 1, -12)
+closeButton.Position = UDim2.new(0.88, 4, 0, 6)
+closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+closeButton.Text = "Close"
+closeButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 9
+closeButton.AutoButtonColor = false
+closeButton.Parent = bottomBar
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeButton
+applyRainbowStroke(closeButton, 1)
+
+-- ==================== STATE & UTILS ====================
+local sourceMode = "GITHUB" -- "GITHUB", "WORKSPACE", "FAVORITES"
+local currentView = "REPOS"
+local currentPath = ""
+local userRepos = {}
+local githubFiles = {}
+local workspaceFiles = {}
+local favoriteItems = {}
+local selectedFile = nil
+local pendingAuthCallback = nil
+local isSettingsOpen = false
+
+local function updateStatus(text)
+    statusLabel.Text = "Status: " .. text
+end
+
+local function bindClick(btn, action)
+    local isAnimating = false
+    local originalSize = btn.Size
+    local originalColor = btn.BackgroundColor3
+
+    btn.Activated:Connect(function()
+        if isAnimating then return end
+        isAnimating = true
+
+        TweenService:Create(btn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(originalSize.X.Scale * 1.08, originalSize.X.Offset * 1.08, originalSize.Y.Scale * 1.08, originalSize.Y.Offset * 1.08),
+            BackgroundColor3 = Color3.fromRGB(
+                math.min(255, originalColor.R * 255 + 35),
+                math.min(255, originalColor.G * 255 + 35),
+                math.min(255, originalColor.B * 255 + 35)
+            )
+        }):Play()
+
+        task.delay(0.1, function()
+            local backTween = TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                Size = originalSize,
+                BackgroundColor3 = originalColor
+            })
+            backTween:Play()
+            backTween.Completed:Connect(function()
+                isAnimating = false
+            end)
+        end)
+
+        if action then action() end
+    end)
+end
+
+local function setSelection(targetBtn)
+    for _, item in ipairs(buildScrollList:GetChildren()) do
+        if item:IsA("TextButton") then
+            local stroke = item:FindFirstChild("SelectionStroke")
+            if stroke then stroke:Destroy() end
+        end
+    end
+    if targetBtn then
+        local stroke = Instance.new("UIStroke")
+        stroke.Name = "SelectionStroke"
+        stroke.Color = Color3.fromRGB(120, 120, 120)
+        stroke.Thickness = 1
+        stroke.Parent = targetBtn
+    end
+end
+
+local function checkLuaExtension(filename)
+    return filename:lower():sub(-4) == ".lua"
+end
+
+-- Favorites Data Management
+local function loadFavorites()
+    favoriteItems = {}
+    if isfile and isfile(FAVORITES_FILE) and readfile then
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(FAVORITES_FILE)) end)
+        if ok and type(data) == "table" then
+            favoriteItems = data
+        end
+    end
+end
+
+local function saveFavorites()
+    if writefile then
+        pcall(function()
+            writefile(FAVORITES_FILE, HttpService:JSONEncode(favoriteItems))
+        end)
+    end
+end
+
+loadFavorites()
+
+-- Password Prompt
+local function promptPassword(callback)
+    pendingAuthCallback = callback
+    authInput.Text = ""
+    authOverlay.Visible = true
+end
+
+bindClick(authSubmitBtn, function()
+    if authInput.Text == REPO_PASS then
+        authOverlay.Visible = false
+        if pendingAuthCallback then pendingAuthCallback() end
+    else
+        updateStatus("Error: Wrong password!")
+        authInput.Text = ""
+    end
+end)
+
+bindClick(authCancelBtn, function()
+    authOverlay.Visible = false
+    pendingAuthCallback = nil
+end)
+
+-- ==================== RENDERERS ====================
+local fetchRepoFiles
+local fetchUserRepos
+local fetchWorkspaceFiles
+local renderFavoritesList
+
+local function hideAllActionButtons()
+    executeButton.Visible  = false
+    editButton.Visible     = false
+    favButton.Visible      = false
+    downloadButton.Visible = false
+    dlFolderButton.Visible = false
+    createButton.Visible   = false
+    deleteButton.Visible   = false
+end
+
+local function renderRepoList(repos)
+    for _, child in ipairs(buildScrollList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    for idx, r in ipairs(repos) do
+        local rBtn = Instance.new("TextButton")
+        rBtn.Size = UDim2.new(1, -4, 0, 34)
+        rBtn.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+        rBtn.BackgroundTransparency = 0.3
+        rBtn.Text = "  📁 " .. r.name .. (r.private and " [Private]" or "")
+        rBtn.TextColor3 = Color3.fromRGB(210, 210, 210)
+        rBtn.Font = Enum.Font.GothamMedium
+        rBtn.TextSize = 11
+        rBtn.TextXAlignment = Enum.TextXAlignment.Left
+        rBtn.AutoButtonColor = false
+        rBtn.LayoutOrder = idx
+        rBtn.Parent = buildScrollList
+
+        local rCorner = Instance.new("UICorner")
+        rCorner.CornerRadius = UDim.new(0, 5)
+        rCorner.Parent = rBtn
+        applyRainbowStroke(rBtn, 1)
+
+        bindClick(rBtn, function()
+            GITHUB_REPO = r.name
+            currentPath = ""
+            fetchRepoFiles()
+        end)
+    end
+end
+
+local function renderFileList(files)
+    for _, child in ipairs(buildScrollList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    for idx, f in ipairs(files) do
+        local isDir = (f.type == "dir")
+        local isLua = not isDir and checkLuaExtension(f.name)
+        
+        local itemBtn = Instance.new("TextButton")
+        itemBtn.Size = UDim2.new(1, -4, 0, 32)
+        itemBtn.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+        itemBtn.BackgroundTransparency = 0.3
+        
+        local icon = isDir and "📁 " or (isLua and "📜 " or "📄 ")
+        itemBtn.Text = "  " .. icon .. f.name
+        itemBtn.TextColor3 = isDir and Color3.fromRGB(240, 200, 100) or Color3.fromRGB(210, 210, 210)
+        itemBtn.Font = Enum.Font.Gotham
+        itemBtn.TextSize = 11
+        itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+        itemBtn.AutoButtonColor = false
+        itemBtn.LayoutOrder = idx
+        itemBtn.Parent = buildScrollList
+
+        local itemCorner = Instance.new("UICorner")
+        itemCorner.CornerRadius = UDim.new(0, 5)
+        itemCorner.Parent = itemBtn
+        applyRainbowStroke(itemBtn, 1)
+
+        bindClick(itemBtn, function()
+            if isDir then
+                currentPath = f.path
+                fetchRepoFiles()
+            else
+                selectedFile = f
+                setSelection(itemBtn)
+                buildTitle.Text = f.name
+
+                hideAllActionButtons()
+                executeButton.Visible  = isLua
+                editButton.Visible     = true
+                favButton.Visible      = true
+                
+                if sourceMode == "GITHUB" then
+                    downloadButton.Visible = true
+                    createButton.Visible   = true
+                    deleteButton.Visible   = true
+                    buildDesc.Text = "Repo: " .. GITHUB_REPO .. "\nPath: " .. f.path .. "\nSize: " .. tostring(f.size or 0) .. " bytes"
+                else
+                    deleteButton.Visible   = true
+                    buildDesc.Text = "Local Path: workspace/" .. FOLDER_NAME .. "/" .. f.name
+                end
+                updateStatus("Selected: " .. f.name)
+            end
+        end)
+    end
+end
+
+renderFavoritesList = function()
+    currentView = "FILES"
+    selectedFile = nil
+    setSelection(nil)
+    backButton.Visible = false
+    createRepoBtn.Visible = false
+    hideAllActionButtons()
+
+    for _, child in ipairs(buildScrollList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    buildTitle.Text = "Favorites"
+    buildDesc.Text = "Your bookmarked files across GitHub and Workspace."
+    updateStatus("Loaded " .. #favoriteItems .. " favorites")
+
+    for idx, fav in ipairs(favoriteItems) do
+        local isLua = checkLuaExtension(fav.name)
+        local itemBtn = Instance.new("TextButton")
+        itemBtn.Size = UDim2.new(1, -4, 0, 32)
+        itemBtn.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+        itemBtn.BackgroundTransparency = 0.3
+        itemBtn.Text = "  ⭐ " .. fav.name .. " (" .. fav.source .. ")"
+        itemBtn.TextColor3 = Color3.fromRGB(240, 220, 120)
+        itemBtn.Font = Enum.Font.Gotham
+        itemBtn.TextSize = 10
+        itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+        itemBtn.AutoButtonColor = false
+        itemBtn.LayoutOrder = idx
+        itemBtn.Parent = buildScrollList
+
+        local itemCorner = Instance.new("UICorner")
+        itemCorner.CornerRadius = UDim.new(0, 5)
+        itemCorner.Parent = itemBtn
+        applyRainbowStroke(itemBtn, 1)
+
+        bindClick(itemBtn, function()
+            selectedFile = fav
+            setSelection(itemBtn)
+            buildTitle.Text = fav.name
+            hideAllActionButtons()
+
+            executeButton.Visible = isLua
+            editButton.Visible    = true
+            deleteButton.Visible  = true
+            
+            buildDesc.Text = "Source: " .. fav.source .. "\nPath: " .. (fav.path or fav.name)
+            updateStatus("Selected Favorite: " .. fav.name)
+        end)
+    end
+end
+
+-- ==================== WORKSPACE & GITHUB LOGIC ====================
+fetchWorkspaceFiles = function()
+    currentView = "FILES"
+    selectedFile = nil
+    setSelection(nil)
+    backButton.Visible = false
+    createRepoBtn.Visible = false
+    searchBox.PlaceholderText = "🔍 Search local file..."
+    searchBox.Text = ""
+    hideAllActionButtons()
+
+    buildTitle.Text = "Workspace: " .. FOLDER_NAME
+    buildDesc.Text = "Browsing local files inside workspace/" .. FOLDER_NAME .. "."
+    updateStatus("Reading workspace files...")
+
+    workspaceFiles = {}
+    if listfiles and isfolder and isfolder(FOLDER_NAME) then
+        local files = listfiles(FOLDER_NAME)
+        for _, filePath in ipairs(files) do
+            local cleanName = filePath:match("([^/]+)$") or filePath
+            table.insert(workspaceFiles, { name = cleanName, path = filePath, type = "file", source = "WORKSPACE" })
+        end
+    end
+
+    renderFileList(workspaceFiles)
+    updateStatus("Loaded " .. #workspaceFiles .. " local files")
+end
+
+fetchUserRepos = function()
+    currentView = "REPOS"
+    currentPath = ""
+    selectedFile = nil
+    backButton.Visible = false
+    createRepoBtn.Visible = true
+    searchBox.PlaceholderText = "🔍 Search repo..."
+    searchBox.Text = ""
+    hideAllActionButtons()
+
+    buildTitle.Text = "Select Repository"
+    buildDesc.Text = "Click on any repository from the left panel to browse its files."
+    updateStatus("Fetching repositories...")
+
+    task.spawn(function()
+        local url = "https://api.github.com/user/repos?per_page=100&sort=updated"
+        local body, code = githubRequest(url, "GET")
+
+        if code == 200 and body then
+            local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+            if ok and type(data) == "table" then
+                userRepos = data
+                renderRepoList(userRepos)
+                updateStatus("Loaded " .. #userRepos .. " repositories")
+                return
+            end
+        end
+        buildTitle.Text = "Error"
+        buildDesc.Text = "Failed to fetch repositories. Status Code: " .. tostring(code)
+        updateStatus("Failed to load repositories")
+    end)
+end
+
+fetchRepoFiles = function()
+    currentView = "FILES"
+    selectedFile = nil
+    setSelection(nil)
+    backButton.Visible = true
+    createRepoBtn.Visible = false
+    searchBox.PlaceholderText = "🔍 Search file..."
+    searchBox.Text = ""
+    hideAllActionButtons()
+
+    dlFolderButton.Visible = true
+    createButton.Visible   = true
+
+    local pathDisplay = (currentPath == "" and "/" or "/" .. currentPath)
+    updateStatus("Fetching contents of " .. GITHUB_REPO .. pathDisplay .. "...")
+
+    task.spawn(function()
+        buildTitle.Text = "Loading files..."
+        local url = string.format("https://api.github.com/repos/%s/%s/contents/%s", GITHUB_OWNER, GITHUB_REPO, currentPath)
+        local body, code = githubRequest(url, "GET")
+
+        if code == 200 and body then
+            local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+            if ok and type(data) == "table" then
+                githubFiles = {}
+                
+                table.sort(data, function(a, b)
+                    if a.type == b.type then
+                        return a.name:lower() < b.name:lower()
+                    end
+                    return a.type == "dir"
+                end)
+
+                for _, item in ipairs(data) do
+                    table.insert(githubFiles, {
+                        name = item.name,
+                        path = item.path,
+                        type = item.type,
+                        download_url = item.download_url,
+                        sha = item.sha,
+                        size = item.size,
+                        source = "GITHUB"
+                    })
+                end
+
+                renderFileList(githubFiles)
+                buildTitle.Text = "Repo: " .. GITHUB_REPO
+                buildDesc.Text = "Current Path: " .. pathDisplay .. "\nSelect a file or open a folder."
+                updateStatus("Loaded " .. #githubFiles .. " items")
+                return
+            end
+        end
+
+        renderFileList({})
+        buildTitle.Text = "Empty Folder"
+        buildDesc.Text = "Status: " .. tostring(code) .. "\nNo items found in " .. pathDisplay .. "."
+        updateStatus("Folder is empty or inaccessible")
+    end)
+end
+
+-- Settings Tab Toggle
+bindClick(settingsTabBtn, function()
+    isSettingsOpen = not isSettingsOpen
+    settingsOverlay.Visible = isSettingsOpen
+    settingsTabBtn.Text = isSettingsOpen and "📁 Files" or "⚙ Settings"
+end)
+
+-- Audio Player Logic
+bindClick(playAudioBtn, function()
+    local text = audioBox.Text:gsub("%s+", "")
+    local audioId = text:match("%d+")
+    if audioId then
+        customAudio.SoundId = "rbxassetid://" .. audioId
+        customAudio:Play()
+        updateStatus("Playing Audio ID: " .. audioId)
+    else
+        updateStatus("Error: Invalid Audio ID")
+    end
+end)
+
+bindClick(stopAudioBtn, function()
+    customAudio:Stop()
+    updateStatus("Audio stopped")
+end)
+
+-- Stroke Animation Mode Cycle
+bindClick(strokeModeBtn, function()
+    if strokeMode == "Rainbow" then
+        strokeMode = "Static"
+        strokeModeBtn.Text = "✨ Stroke Mode: Static (Custom)"
+    elseif strokeMode == "Static" then
+        strokeMode = "Pulse"
+        strokeModeBtn.Text = "✨ Stroke Mode: Pulse"
+    else
+        strokeMode = "Rainbow"
+        strokeModeBtn.Text = "✨ Stroke Mode: Rainbow"
+    end
+end)
+
+bindClick(bgMusicToggleBtn, function()
+    bgMusicMuted = not bgMusicMuted
+    if bgMusicMuted then
+        bgMusic:Pause()
+        bgMusicToggleBtn.Text = "🎵 Background Music: OFF"
+    else
+        bgMusic:Play()
+        bgMusicToggleBtn.Text = "🎵 Background Music: ON"
+    end
+end)
+
+bindClick(soundToggleBtn, function()
+    soundMuted = not soundMuted
+    soundToggleBtn.Text = "🔊 UI Click Sound: " .. (soundMuted and "OFF" or "ON")
+end)
+
+-- Source Mode Toggle
+bindClick(toggleSourceBtn, function()
+    if sourceMode == "GITHUB" then
+        sourceMode = "WORKSPACE"
+        toggleSourceBtn.Text = "Source: Workspace"
+        fetchWorkspaceFiles()
+    elseif sourceMode == "WORKSPACE" then
+        sourceMode = "FAVORITES"
+        toggleSourceBtn.Text = "Source: Favorites"
+        renderFavoritesList()
+    else
+        sourceMode = "GITHUB"
+        toggleSourceBtn.Text = "Source: GitHub"
+        fetchUserRepos()
+    end
+end)
+
+bindClick(backButton, function()
+    if sourceMode == "GITHUB" then
+        if currentPath ~= "" then
+            local parentPath = currentPath:match("(.*)/[^/]+$") or ""
+            currentPath = parentPath
+            fetchRepoFiles()
+        else
+            fetchUserRepos()
+        end
+    end
+end)
+
+-- Favorites Button Action
+bindClick(favButton, function()
+    if not selectedFile then return end
+    
+    for _, item in ipairs(favoriteItems) do
+        if item.name == selectedFile.name and item.source == (selectedFile.source or sourceMode) then
+            updateStatus("Already in Favorites!")
+            return
+        end
+    end
+
+    table.insert(favoriteItems, {
+        name = selectedFile.name,
+        path = selectedFile.path,
+        download_url = selectedFile.download_url,
+        source = selectedFile.source or sourceMode
+    })
+    saveFavorites()
+    updateStatus("Added to Favorites!")
+end)
+
+-- Edit Code Action (Protected by Password)
+bindClick(editButton, function()
+    if not selectedFile then return end
+
+    promptPassword(function()
+        updateStatus("Loading file for editing...")
+        task.spawn(function()
+            local content = ""
+            local src = selectedFile.source or sourceMode
+
+            if src == "GITHUB" and selectedFile.download_url then
+                local body, code = githubRequest(selectedFile.download_url, "GET")
+                if code == 200 and body then content = body end
+            elseif readfile then
+                local localPath = FOLDER_NAME .. "/" .. selectedFile.name
+                if isfile and isfile(localPath) then content = readfile(localPath) end
+            end
+
+            editorTextBox.Text = content
+            editorTitle.Text = "Editing: " .. selectedFile.name
+            editorOverlay.Visible = true
+            updateStatus("Editing unlocked")
+        end)
+    end)
+end)
+
+bindClick(saveCodeBtn, function()
+    if not selectedFile then return end
+    local newContent = editorTextBox.Text
+    local src = selectedFile.source or sourceMode
+
+    updateStatus("Saving file...")
+    task.spawn(function()
+        if src == "GITHUB" then
+            local base64Content = toBase64(newContent)
+            local url = string.format("https://api.github.com/repos/%s/%s/contents/%s", GITHUB_OWNER, GITHUB_REPO, selectedFile.path)
+            local payload = {
+                message = "Updated " .. selectedFile.name .. " via AltPre-Loader Editor",
+                content = base64Content,
+                sha = selectedFile.sha
+            }
+            local body, code = githubRequest(url, "PUT", payload)
+            if code == 200 or code == 201 then
+                updateStatus("Saved to GitHub successfully!")
+                editorOverlay.Visible = false
+                fetchRepoFiles()
+            else
+                updateStatus("Error saving to GitHub (Code " .. tostring(code) .. ")")
+            end
+        else
+            local localPath = FOLDER_NAME .. "/" .. selectedFile.name
+            if writefile then
+                writefile(localPath, newContent)
+                updateStatus("Saved locally successfully!")
+                editorOverlay.Visible = false
+                fetchWorkspaceFiles()
+            end
+        end
+    end)
+end)
+
+bindClick(closeCodeBtn, function()
+    editorOverlay.Visible = false
+end)
+
+-- Delete Action (Protected by Password)
+bindClick(deleteButton, function()
+    if not selectedFile then return end
+
+    promptPassword(function()
+        local src = selectedFile.source or sourceMode
+
+        if src == "FAVORITES" then
+            for i, fav in ipairs(favoriteItems) do
+                if fav.name == selectedFile.name then
+                    table.remove(favoriteItems, i)
+                    break
+                end
+            end
+            saveFavorites()
+            renderFavoritesList()
+            updateStatus("Removed from Favorites")
+            return
+        end
+
+        updateStatus("Deleting " .. selectedFile.name .. "...")
+        task.spawn(function()
+            if src == "GITHUB" then
+                local url = string.format("https://api.github.com/repos/%s/%s/contents/%s", GITHUB_OWNER, GITHUB_REPO, selectedFile.path)
+                local payload = {
+                    message = "Deleted " .. selectedFile.name .. " via AltPre-Loader",
+                    sha = selectedFile.sha
+                }
+                local body, code = githubRequest(url, "DELETE", payload)
+                if code == 200 then
+                    updateStatus("Deleted from GitHub")
+                    fetchRepoFiles()
+                else
+                    updateStatus("Error deleting file from GitHub")
+                end
+            else
+                local localPath = FOLDER_NAME .. "/" .. selectedFile.name
+                if delfile and isfile and isfile(localPath) then
+                    delfile(localPath)
+                    updateStatus("Deleted local file")
+                    fetchWorkspaceFiles()
+                end
+            end
+        end)
+    end)
+end)
+
+-- Download Folder Action (Bulk Download)
+bindClick(dlFolderButton, function()
+    if sourceMode ~= "GITHUB" then return end
+    updateStatus("Downloading entire folder...")
+
+    task.spawn(function()
+        local count = 0
+        for _, gf in ipairs(githubFiles) do
+            if gf.type == "file" and gf.download_url then
+                local body, code = githubRequest(gf.download_url, "GET")
+                if code == 200 and body and writefile then
+                    writefile(FOLDER_NAME .. "/" .. gf.name, body)
+                    count = count + 1
+                end
+            end
+        end
+        updateStatus("Downloaded " .. count .. " files to workspace/" .. FOLDER_NAME)
+    end)
+end)
+
+-- Create Repo Dialog
+bindClick(createRepoBtn, function()
+    repoNameInput.Text = ""
+    repoPassInput.Text = ""
+    isPrivateRepo = false
+    privateToggleBtn.Text = "Private: OFF"
+    createRepoOverlay.Visible = true
+end)
+
+bindClick(privateToggleBtn, function()
+    isPrivateRepo = not isPrivateRepo
+    privateToggleBtn.Text = "Private: " .. (isPrivateRepo and "ON" or "OFF")
+end)
+
+bindClick(cancelCreateRepoBtn, function()
+    createRepoOverlay.Visible = false
+end)
+
+bindClick(submitCreateRepoBtn, function()
+    local repoName = repoNameInput.Text:gsub("%s+", "")
+    local enteredPass = repoPassInput.Text
+
+    if repoName == "" then
+        updateStatus("Error: Repository name is empty")
+        return
+    end
+
+    if enteredPass ~= REPO_PASS then
+        updateStatus("Error: Invalid password!")
+        repoPassInput.Text = ""
+        return
+    end
+
+    createRepoOverlay.Visible = false
+    updateStatus("Creating repository " .. repoName .. "...")
+
+    task.spawn(function()
+        local url = "https://api.github.com/user/repos"
+        local payload = {
+            name = repoName,
+            private = isPrivateRepo,
+            auto_init = true
+        }
+
+        local body, code = githubRequest(url, "POST", payload)
+        if code == 201 or code == 200 then
+            buildTitle.Text = "Repo Created"
+            buildDesc.Text = "Repository " .. repoName .. " created successfully."
+            updateStatus("Created repo " .. repoName)
+            fetchUserRepos()
+        else
+            buildTitle.Text = "Creation Failed"
+            buildDesc.Text = "Failed to create repo. Response Code: " .. tostring(code)
+            updateStatus("Error creating repo (Code " .. tostring(code) .. ")")
+        end
+    end)
+end)
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local text = string.lower(searchBox.Text)
+    if sourceMode == "GITHUB" then
+        if currentView == "REPOS" then
+            local filtered = {}
+            for _, r in ipairs(userRepos) do
+                if string.find(string.lower(r.name), text, 1, true) then
+                    table.insert(filtered, r)
+                end
+            end
+            renderRepoList(filtered)
+        else
+            local filtered = {}
+            for _, f in ipairs(githubFiles) do
+                if string.find(string.lower(f.name), text, 1, true) then
+                    table.insert(filtered, f)
+                end
+            end
+            renderFileList(filtered)
+        end
+    elseif sourceMode == "WORKSPACE" then
+        local filtered = {}
+        for _, f in ipairs(workspaceFiles) do
+            if string.find(string.lower(f.name), text, 1, true) then
+                table.insert(filtered, f)
+            end
+        end
+        renderFileList(filtered)
+    end
+end)
+
+-- Execute
+bindClick(executeButton, function()
+    if not selectedFile then return end
+    if not checkLuaExtension(selectedFile.name) then
+        updateStatus("Error: Only .lua files can be executed")
+        return
+    end
+
+    updateStatus("Executing " .. selectedFile.name .. "...")
+
+    task.spawn(function()
+        local scriptContent = nil
+        local src = selectedFile.source or sourceMode
+
+        if src == "GITHUB" and selectedFile.download_url then
+            local body, code = githubRequest(selectedFile.download_url, "GET")
+            if code == 200 and body then scriptContent = body end
+        else
+            local localPath = FOLDER_NAME .. "/" .. selectedFile.name
+            if readfile and isfile and isfile(localPath) then
+                scriptContent = readfile(localPath)
+            end
+        end
+
+        if scriptContent then
+            local func, err = loadstring(scriptContent)
+            if func then
+                local successRun, runErr = pcall(func)
+                if successRun then
+                    buildTitle.Text = "Execution Successful"
+                    buildDesc.Text = "Script " .. selectedFile.name .. " executed without errors."
+                    updateStatus("Executed " .. selectedFile.name)
+                else
+                    buildTitle.Text = "Runtime Error"
+                    buildDesc.Text = tostring(runErr)
+                    updateStatus("Runtime error during execution")
+                end
+            else
+                buildTitle.Text = "Syntax Error"
+                buildDesc.Text = tostring(err)
+                updateStatus("Syntax error in script")
+            end
+        end
+    end)
+end)
+
+-- Download Single File
+bindClick(downloadButton, function()
+    if not selectedFile or selectedFile.type == "dir" then return end
+    if not writefile then
+        buildTitle.Text = "writefile not supported"
+        updateStatus("Error: Executor lacks writefile")
+        return
+    end
+
+    updateStatus("Downloading " .. selectedFile.name .. "...")
+    task.spawn(function()
+        local body, code = githubRequest(selectedFile.download_url, "GET")
+        if body then
+            local localPath = FOLDER_NAME .. "/" .. selectedFile.name
+            writefile(localPath, body)
+            buildTitle.Text = "Download Complete"
+            buildDesc.Text = "Saved to workspace/" .. localPath
+            updateStatus("Downloaded " .. selectedFile.name)
+        else
+            buildTitle.Text = "Download Failed"
+            updateStatus("Error downloading file")
+        end
+    end)
+end)
+
+-- Workspace Upload Selection
+local function performUpload(fileName)
+    local localPath = FOLDER_NAME .. "/" .. fileName
+    if not (readfile and isfile and isfile(localPath)) then return end
+
+    local targetPath = (currentPath == "" and fileName or currentPath .. "/" .. fileName)
+    updateStatus("Uploading " .. fileName .. " to " .. targetPath .. "...")
+
+    task.spawn(function()
+        local content = readfile(localPath)
+        local base64Content = toBase64(content)
+
+        local existingSha = nil
+        for _, gf in ipairs(githubFiles) do
+            if gf.name == fileName and gf.type == "file" then
+                existingSha = gf.sha
+                break
+            end
+        end
+
+        local url = string.format("https://api.github.com/repos/%s/%s/contents/%s", GITHUB_OWNER, GITHUB_REPO, targetPath)
+        local payload = {
+            message = "Uploaded " .. fileName .. " via AltPre-Loader",
+            content = base64Content,
+            sha = existingSha
+        }
+
+        local body, code = githubRequest(url, "PUT", payload)
+        if code == 200 or code == 201 then
+            buildTitle.Text = "Upload Successful"
+            buildDesc.Text = fileName .. " uploaded successfully to " .. GITHUB_REPO .. "/" .. currentPath
+            updateStatus("Uploaded " .. fileName)
+            fetchRepoFiles()
+        else
+            buildTitle.Text = "Upload Failed"
+            buildDesc.Text = "Failed to upload. Status Code: " .. tostring(code)
+            updateStatus("Upload error (Code " .. tostring(code) .. ")")
+        end
+    end)
+end
+
+local function openUploadSelector()
+    for _, child in ipairs(uploadScroll:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    local localFiles = {}
+    if listfiles and isfolder and isfolder(FOLDER_NAME) then
+        local files = listfiles(FOLDER_NAME)
+        for _, filePath in ipairs(files) do
+            local cleanName = filePath:match("([^/]+)$") or filePath
+            table.insert(localFiles, cleanName)
+        end
+    end
+
+    if #localFiles == 0 then
+        updateStatus("No local files in workspace/" .. FOLDER_NAME)
+        return
+    end
+
+    for idx, fName in ipairs(localFiles) do
+        local fBtn = Instance.new("TextButton")
+        fBtn.Size = UDim2.new(1, 0, 0, 30)
+        fBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        fBtn.Text = " 📄 " .. fName
+        fBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+        fBtn.Font = Enum.Font.Gotham
+        fBtn.TextSize = 11
+        fBtn.TextXAlignment = Enum.TextXAlignment.Left
+        fBtn.ZIndex = 53
+        fBtn.AutoButtonColor = false
+        fBtn.LayoutOrder = idx
+        fBtn.Parent = uploadScroll
+
+        local fCorner = Instance.new("UICorner")
+        fCorner.CornerRadius = UDim.new(0, 5)
+        fCorner.Parent = fBtn
+        applyRainbowStroke(fBtn, 1)
+
+        bindClick(fBtn, function()
+            uploadOverlay.Visible = false
+            performUpload(fName)
+        end)
+    end
+
+    uploadOverlay.Visible = true
+end
+
+bindClick(createButton, openUploadSelector)
+
+bindClick(cancelUploadBtn, function()
+    uploadOverlay.Visible = false
+end)
+
+-- ==================== PREMIUM GUI ANIMATION SYSTEM ====================
+local isOpen = true
+
+mainFrame.Visible = true
+mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+
+local function openGUI()
+    if isOpen then return end
+    isOpen = true
+    playClick()
+    
+    mainFrame.Visible = true
+    guiScale.Scale = 0.75
+    mainFrame.BackgroundTransparency = 1
+    
+    blurEffect.Enabled = true
+    TweenService:Create(blurEffect, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = 16
+    }):Play()
+
+    TweenService:Create(openButton, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 1
+    }):Play()
+
+    task.delay(0.15, function()
+        openButton.Visible = false
+    end)
+
+    local openTweenScale = TweenService:Create(guiScale, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Scale = 1.0
+    })
+    
+    local openTweenFade = TweenService:Create(mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.15
+    })
+
+    openTweenScale:Play()
+    openTweenFade:Play()
+
+    if sourceMode == "GITHUB" then
+        fetchUserRepos()
+    elseif sourceMode == "WORKSPACE" then
+        fetchWorkspaceFiles()
+    else
+        renderFavoritesList()
+    end
+end
+
+local function closeGUI()
+    if not isOpen then return end
+    isOpen = false
+    playClick()
+
+    TweenService:Create(blurEffect, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Size = 0
+    }):Play()
+
+    local closeTweenScale = TweenService:Create(guiScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        Scale = 0.7
+    })
+    
+    local closeTweenFade = TweenService:Create(mainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        BackgroundTransparency = 1
+    })
+
+    closeTweenScale:Play()
+    closeTweenFade:Play()
+
+    openButton.Visible = true
+    openButton.Size = UDim2.new(0, 0, 0, 0)
+    openButton.BackgroundTransparency = 1
+
+    TweenService:Create(openButton, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 54, 0, 54),
+        BackgroundTransparency = 0.2
+    }):Play()
+
+    closeTweenFade.Completed:Connect(function()
+        if not isOpen then
+            mainFrame.Visible = false
+            blurEffect.Enabled = false
+        end
+    end)
+end
+
+bindClick(openButton, openGUI)
+bindClick(closeButton, closeGUI)
